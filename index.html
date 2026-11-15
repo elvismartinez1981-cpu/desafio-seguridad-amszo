@@ -44,7 +44,7 @@ main{max-width:1060px}header{text-align:center;padding:16px 0 10px}header h1{fon
 // Audio independiente de Firebase: el botón funciona incluso si falla la conexión.
 (()=>{
 const button=document.getElementById('musicToggle');
-let ctx=null,timer=null,on=false,step=0;
+let ctx=null,timer=null,on=false,step=0,lastStageKey='',effectUntil=0;
 const AudioEngine=window.AudioContext||window.webkitAudioContext;
 const notes=[220,233.08,261.63,246.94,220,196,207.65,174.61];
 function tone(f,when,dur,vol,type='triangle'){
@@ -55,12 +55,42 @@ function tone(f,when,dur,vol,type='triangle'){
  g.gain.exponentialRampToValueAtTime(.0001,when+dur);
  o.connect(g);g.connect(ctx.destination);o.start(when);o.stop(when+dur+.02);
 }
+function effect(kind){
+ if(!on||!ctx)return;
+ const t=ctx.currentTime+.03;
+ if(kind==='reveal'){
+   // Redoble ascendente sincronizado con el recorrido de la luz (3 segundos).
+   for(let n=0;n<16;n++){
+     const at=t+n*.18, f=300+n*33;
+     tone(f,at,.11,.15,'triangle');
+     tone(110+(n%4)*30,at,.07,.11,'square');
+   }
+   effectUntil=Date.now()+3000;
+ }else if(kind==='result'){
+   // Fanfarria triunfal ORIGINAL al iluminarse la alternativa correcta.
+   const melody=[[523.25,0,.18],[659.25,.18,.18],[783.99,.36,.22],
+     [1046.5,.61,.45],[783.99,1.10,.15],[1046.5,1.28,.60]];
+   melody.forEach(([f,d,len])=>{
+     tone(f,t+d,len,.21,'triangle');
+     tone(f/2,t+d,len,.13,'sine');
+   });
+   effectUntil=Date.now()+2000;
+ }
+}
+window.AMSZOAudioStage=(key,stage)=>{
+ if(!on||!ctx||!key)return;
+ const marker=key+':'+stage;
+ if(marker===lastStageKey)return;
+ lastStageKey=marker;
+ if(stage==='reveal'||stage==='result')effect(stage);
+};
 function tick(){
  if(!on)return;
  const secEl=document.getElementById('playerSeconds');
  const sec=secEl&&secEl.offsetParent!==null?Number(secEl.textContent):null;
  const urgent=sec!==null&&sec>0&&sec<=5;
  const t=ctx.currentTime+.03;
+ if(Date.now()<effectUntil){timer=setTimeout(tick,390);return;}
  // Sonido de suspenso claramente audible, con graves y melodía misteriosa.
  tone(110,t,.22,.22,'sine');
  tone(notes[step%notes.length],t,.28,.27,'triangle');
@@ -75,7 +105,7 @@ button.addEventListener('click',async()=>{
   if(!AudioEngine)throw Error('Audio no compatible');
   if(!ctx)ctx=new AudioEngine();
   await ctx.resume();
-  on=true;step=0;tick();
+  on=true;step=0;lastStageKey='';tick();
   button.textContent='♫ Silenciar música';button.setAttribute('aria-pressed','true');
  }catch(e){on=false;button.textContent='Audio no disponible';alert('No se pudo iniciar el audio: '+e.message);}
 });
@@ -121,7 +151,11 @@ function stats(uid){let correct=0,totalMs=0,fastest=null,score=0;for(let i=0;i<1
 let tallyBusy=false;async function tally(){if(!admin()||!room)return;for(const [uid,p] of Object.entries(room.players||{})){const s=stats(uid);if(p.score!==s.score){try{await set(ref(db,'rooms/'+roomCode+'/players/'+uid+'/score'),s.score)}catch(e){}}}}
 function answerButtons(q,selected,stage){if(!q)return '';const spinIndex=Math.floor(Math.max(0,elapsed()-10000)/180)%4;return `<div class="answers">${q[1].map((a,i)=>{const cls=stage==='reveal'&&i===spinIndex?'spin':stage==='result'&&i===q[2]?'correct':stage==='result'&&selected===i&&i!==q[2]?'wrong':selected===i?'selected':'';return `<button class="${cls}" ${stage!=='answering'?'disabled':''} onclick="submitAnswer(${i})">${'ABCD'[i]}. ${esc(a)}${stage==='result'&&i===q[2]?' ✓ CORRECTA':''}</button>`}).join('')}</div>`}
 function statsHTML(){const i=qIndex(),q=current();if(!q||phase()!=='result')return '';const all=Object.keys(room.players||{}),answers=all.map(uid=>getAnswer(i,uid)).filter(Boolean),total=answers.length,counts=[0,0,0,0];answers.forEach(a=>counts[a.choice]++);const correct=counts[q[2]],noAnswer=all.length-total;return `<h3>Resultados de la pregunta</h3><p>${total} de ${all.length} participantes respondieron · ${noAnswer} sin respuesta · ${total?Math.round(correct/total*100):0}% de aciertos entre quienes respondieron</p>${q[1].map((a,k)=>`<div class="stat"><div class="line"><span>${'ABCD'[k]}. ${esc(a)}${k===q[2]?' ✓':''}</span><strong>${total?Math.round(counts[k]/total*100):0}% (${counts[k]})</strong></div><div class="bar"><div class="fill" style="width:${total?counts[k]/total*100:0}%;background:${k===q[2]?'#27c978':'#f5ca72'}"></div></div></div>`).join('')}`}
-function render(){if(role==='teacher'){if(!admin())return;const pending=Object.entries(room?.requests||{}).filter(([uid,r])=>r.status==='pending');$('pendingRequests').innerHTML=pending.length?pending.map(([uid,r])=>`<div class="panel"><strong>${esc(r.name)}</strong> <button onclick="decideRequest('${uid}',true)">Aceptar</button> <button onclick="decideRequest('${uid}',false)">Rechazar</button></div>`).join(''):'<p class="muted">No hay solicitudes pendientes.</p>';$('roomInfo').innerHTML=room?`<p><strong>Código: ${esc(roomCode)}</strong> · ${esc(room.area)} · ${esc(room.status)}</p><p>Participantes autorizados: ${Object.keys(room.players||{}).length}</p>`:'<p>Crea una partida para comenzar.</p>';$('nextQuestion').disabled=!room||room.status==='closed'||(qIndex()>=0&&phase()!=='result')||qIndex()>=9;$('teacherQuestion').innerHTML=current()?`<h3>Pregunta ${qIndex()+1}/10</h3><p>${esc(current()[0])}</p>${answerButtons(current(),null,phase())}<p class="timer">${phase()==='answering'?'⏱️ '+Math.max(0,Math.ceil((10000-elapsed())/1000))+' segundos':phase()==='reveal'?'✨ Revelando respuesta…':'✓ Respuesta revelada'}</p>`:'';$('teacherStats').innerHTML=statsHTML();$('ranking').innerHTML=Object.entries(room?.players||{}).map(([uid,p])=>({name:p.name,...stats(uid)})).sort((a,b)=>b.score-a.score||b.correct-a.correct||a.totalMs-b.totalMs).map(p=>`<li>${esc(p.name)} — <strong>${p.score} puntos</strong> · ${p.correct} aciertos · ${p.correct?(p.totalMs/1000).toFixed(2)+' s en aciertos':'sin aciertos'}${p.fastest!==null?' · más rápida: '+(p.fastest/1000).toFixed(2)+' s':''}</li>`).join('')}
+function render(){
+ if(room&&roomCode&&Number(room.index)>=0&&(role==='teacher'||role==='player')){
+   window.AMSZOAudioStage?.(roomCode+':'+room.index,phase());
+ }
+ if(role==='teacher'){if(!admin())return;const pending=Object.entries(room?.requests||{}).filter(([uid,r])=>r.status==='pending');$('pendingRequests').innerHTML=pending.length?pending.map(([uid,r])=>`<div class="panel"><strong>${esc(r.name)}</strong> <button onclick="decideRequest('${uid}',true)">Aceptar</button> <button onclick="decideRequest('${uid}',false)">Rechazar</button></div>`).join(''):'<p class="muted">No hay solicitudes pendientes.</p>';$('roomInfo').innerHTML=room?`<p><strong>Código: ${esc(roomCode)}</strong> · ${esc(room.area)} · ${esc(room.status)}</p><p>Participantes autorizados: ${Object.keys(room.players||{}).length}</p>`:'<p>Crea una partida para comenzar.</p>';$('nextQuestion').disabled=!room||room.status==='closed'||(qIndex()>=0&&phase()!=='result')||qIndex()>=9;$('teacherQuestion').innerHTML=current()?`<h3>Pregunta ${qIndex()+1}/10</h3><p>${esc(current()[0])}</p>${answerButtons(current(),null,phase())}<p class="timer">${phase()==='answering'?'⏱️ '+Math.max(0,Math.ceil((10000-elapsed())/1000))+' segundos':phase()==='reveal'?'✨ Revelando respuesta…':'✓ Respuesta revelada'}</p>`:'';$('teacherStats').innerHTML=statsHTML();$('ranking').innerHTML=Object.entries(room?.players||{}).map(([uid,p])=>({name:p.name,...stats(uid)})).sort((a,b)=>b.score-a.score||b.correct-a.correct||a.totalMs-b.totalMs).map(p=>`<li>${esc(p.name)} — <strong>${p.score} puntos</strong> · ${p.correct} aciertos · ${p.correct?(p.totalMs/1000).toFixed(2)+' s en aciertos':'sin aciertos'}${p.fastest!==null?' · más rápida: '+(p.fastest/1000).toFixed(2)+' s':''}</li>`).join('')}
 if(role==='player'){const box=$('playerGame');if(!room||!user){if(box.innerHTML)box.innerHTML='';return}const req=room.requests?.[user.uid],participants=Object.keys(room.players||{}).length;if(!room.players?.[user.uid]){const html=req?.status==='rejected'?'<p class="error">El instructor rechazó tu solicitud.</p>':req?.status==='pending'?'<p>Solicitud enviada. Espera autorización del instructor.</p>':'<p>Debes solicitar acceso a la sala.</p>';if(box.innerHTML!==html)box.innerHTML=html;return}if(room.status==='closed'){const html='<h3>Partida finalizada</h3><p>Tu puntaje: '+stats(user.uid).score+'</p>';if(box.innerHTML!==html)box.innerHTML=html;return}if(qIndex()<0){const html=`<div class="stage"><div class="stage-top"><span class="stage-label">🎮 SALA ${esc(roomCode)}</span><span class="chip">${esc(room.area)}</span></div><div class="stage-hud"><div class="hud-tile"><span style="font-size:2rem">👥</span><div><div class="hud-value">${participants}</div><div class="hud-caption">Participantes</div></div></div><div class="hud-tile"><span style="font-size:2rem">🏁</span><div><div class="hud-value">0 / 10</div><div class="hud-caption">Preguntas</div></div></div></div><div class="stage-feedback">✓ Estás autorizado. ¡Esperando al instructor para comenzar!</div></div>`;if(box.innerHTML!==html)box.innerHTML=html;return}const q=current();if(!q)return;const a=getAnswer(qIndex(),user.uid),selected=a?.choice??null,stage=phase();const feedback=stage==='answering'?(a?'✅ Respuesta registrada en '+(a.ms/1000).toFixed(2)+' s':'¡Selecciona tu respuesta antes de que termine el tiempo!'):stage==='result'?(a?(a.choice===q[2]?'🎉 ¡Respuesta correcta!':'💡 Respuesta incorrecta')+' · '+(a.ms/1000).toFixed(2)+' s':'⏰ No respondiste a tiempo.'):'✨ ¡Atención! Revelando respuesta…';const html=`<div class="stage"><div class="stage-top"><span class="stage-label">🏆 DESAFÍO SEGURIDAD AMSZO</span><span class="chip">Sala ${esc(roomCode)}</span></div><div class="stage-hud"><div class="hud-tile"><div id="playerClock" class="clock"><div class="clock-inner" id="playerSeconds">10</div></div><div><div class="hud-caption">Tiempo restante</div><div id="clockText" class="small muted">¡Responde ya!</div></div></div><div class="hud-tile"><span style="font-size:2rem">👥</span><div><div class="hud-value">${participants}</div><div class="hud-caption">Participantes</div></div></div></div><div class="question-card"><h3>Pregunta ${qIndex()+1} de 10</h3><p>${esc(q[0])}</p></div>${answerButtons(q,selected,stage)}<div class="stage-feedback">${feedback}</div><div class="stage-footer"><span>⭐ Tus puntos: <strong>${stats(user.uid).score}</strong></span><span>${esc(room.area)}</span></div><div class="stage-progress"><span style="width:${(qIndex()+1)*10}%"></span></div></div>`;
 // No reconstruir los botones si nada cambió: evita perder clics en celulares.
 if(playerLastHTML!==html){box.innerHTML=html;playerLastHTML=html}
