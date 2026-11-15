@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Desafío Seguridad AMSZO</title>
+<style>
+:root{font-family:system-ui,Arial;background:#081b36;color:#fff}body{margin:0;padding:24px}main{max-width:780px;margin:auto}h1{color:#f2c66e}h2{margin-top:0}.panel{background:#132b4d;border:1px solid #365377;border-radius:16px;padding:22px;margin:16px 0}button,input,select{font:inherit;padding:12px;border-radius:9px;margin:5px 0}button{background:#f2c66e;color:#14213b;border:0;cursor:pointer;font-weight:700}button:disabled{opacity:.45}input,select{background:#fff;color:#111;width:calc(100% - 28px)}.hide{display:none}.answers button{display:block;width:100%;text-align:left;margin:9px 0}.muted{color:#c8d4e6}.tag{color:#f2c66e}#timer{font-size:2rem;font-weight:bold}li{margin:8px 0}
+</style></head><body><main><header><small class="tag">PREVENCIÓN DE RIESGOS · AMSZO</small><h1>Desafío Seguridad</h1><p>Aprende · Compite · Previene</p></header>
+<section id="home" class="panel"><h2>Selecciona tu rol</h2><button onclick="show('teacher')">Soy instructor</button> <button onclick="show('player')">Soy participante</button><p class="muted">Demostración local: funciona entre pestañas del mismo navegador. Para conectar celulares por internet falta configurar Firebase.</p></section>
+<section id="teacher" class="panel hide"><h2>Panel del instructor</h2><label>Área de trabajo</label><select id="area"><option>Patrullaje Preventivo</option><option>Administración</option><option>TIC</option><option>Aseo</option><option>Mantención</option><option>Operaciones</option></select><button onclick="createRoom()">Crear partida</button><div id="roomInfo"></div><button onclick="nextQuestion()">Iniciar / Siguiente pregunta</button><div id="teacherQuestion"></div><h3>Ranking</h3><ol id="ranking"></ol><button onclick="resetRoom()">Cerrar partida</button></section>
+<section id="player" class="panel hide"><h2>Ingresar a partida</h2><label>Tu nombre</label><input id="playerName" placeholder="Ej.: Jugador 1" maxlength="30"><label>Código de sala</label><input id="roomCode" placeholder="6 dígitos" inputmode="numeric" maxlength="6"><button onclick="joinRoom()">Ingresar</button><p id="joinMessage" class="muted"></p><div id="playerGame"></div></section>
+<footer class="muted">Versión de prueba · No ingresar información personal sensible.</footer></main>
+<script>
+'use strict';
+const QUESTIONS=[
+{q:'Antes de iniciar un patrullaje, ¿qué se debe verificar?',a:['Solo el combustible','Estado del vehículo y elementos de seguridad','Únicamente la radio','Solo el horario'],ok:1},
+{q:'Al detectar una condición insegura durante el servicio, corresponde:',a:['Ignorarla','Continuar sin informar','Informarla y aplicar medidas de control','Publicarla en redes sociales'],ok:2},
+{q:'¿Cuál es una conducta de conducción defensiva?',a:['Mantener distancia de seguridad','Usar el teléfono al conducir','Exceder la velocidad','Frenar bruscamente sin necesidad'],ok:0},
+{q:'Ante una emergencia, la primera prioridad es:',a:['Grabar lo ocurrido','Proteger la vida y activar el procedimiento','Recuperar objetos','Continuar la ronda'],ok:1},
+{q:'¿Para qué se utiliza el equipo de protección personal?',a:['Para reemplazar todos los controles','Para reducir la exposición a riesgos específicos','Solo para cumplir con una formalidad','Para evitar reportar incidentes'],ok:1}
+];
+const KEY='amszo_demo_room_v1';
+const uid=()=>Math.random().toString(36).slice(2,10);
+let playerId=sessionStorage.getItem('amszo_player_id')||uid();sessionStorage.setItem('amszo_player_id',playerId);
+let role='home',lastQuestion=-1,answered=-1,interval=null;
+function getRoom(){try{return JSON.parse(localStorage.getItem(KEY)||'null')}catch{return null}}
+function putRoom(room){localStorage.setItem(KEY,JSON.stringify(room));render()}
+function show(which){role=which;for(const id of ['home','teacher','player'])document.getElementById(id).classList.toggle('hide',id!==which);render()}
+function createRoom(){const room={code:String(Math.floor(100000+Math.random()*900000)),area:document.getElementById('area').value,index:-1,started:0,players:{}};putRoom(room)}
+function resetRoom(){localStorage.removeItem(KEY);render()}
+function joinRoom(){const name=document.getElementById('playerName').value.trim(),code=document.getElementById('roomCode').value.trim(),r=getRoom();const msg=document.getElementById('joinMessage');if(!name){msg.textContent='Escribe tu nombre.';return}if(!r||r.code!==code){msg.textContent='Código incorrecto o partida inexistente.';return}r.players[playerId]={name,score:r.players[playerId]?.score||0,answered:-1};putRoom(r);msg.textContent='¡Ingresaste! Espera la siguiente pregunta.'}
+function nextQuestion(){const r=getRoom();if(!r){alert('Primero crea una partida.');return}if(r.index>=QUESTIONS.length-1){alert('Se terminaron las preguntas. Revisa el ranking.');return}r.index++;r.started=Date.now();putRoom(r)}
+function answer(choice){const r=getRoom();if(!r||!r.players[playerId]||r.index<0||r.players[playerId].answered===r.index||Date.now()-r.started>=10000)return;r.players[playerId].answered=r.index;if(choice===QUESTIONS[r.index].ok)r.players[playerId].score+=100;putRoom(r)}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function render(){const r=getRoom();if(role==='teacher'){document.getElementById('roomInfo').innerHTML=r?`<p>Código de sala: <strong>${r.code}</strong> · ${esc(r.area)}</p><p>Participantes: ${Object.keys(r.players).length}</p>`:'<p>Crea una partida para comenzar.</p>';document.getElementById('teacherQuestion').innerHTML=r&&r.index>=0?`<h3>Pregunta ${r.index+1}/${QUESTIONS.length}</h3><p>${esc(QUESTIONS[r.index].q)}</p><p id="timer"></p>`:'';document.getElementById('ranking').innerHTML=r?Object.values(r.players).sort((a,b)=>b.score-a.score).map(p=>`<li>${esc(p.name)} — ${p.score} puntos</li>`).join(''):''}
+if(role==='player'){const box=document.getElementById('playerGame');if(!r||!r.players[playerId]){box.innerHTML='';return}if(r.index<0){box.innerHTML='<p>Esperando que el instructor inicie la partida…</p>';return}const q=QUESTIONS[r.index],done=r.players[playerId].answered===r.index,left=Math.max(0,Math.ceil((10000-(Date.now()-r.started))/1000));if(lastQuestion!==r.index){lastQuestion=r.index;answered=-1}box.innerHTML=`<h3>Pregunta ${r.index+1}/${QUESTIONS.length}</h3><p>${esc(q.q)}</p><div class="answers">${q.a.map((a,i)=>`<button ${done||left===0?'disabled':''} onclick="answer(${i})">${String.fromCharCode(65+i)}. ${esc(a)}</button>`).join('')}</div><p id="timer"></p><p>${done?'Respuesta registrada.':'Selecciona una respuesta antes de que termine el tiempo.'}</p><p>Puntaje: ${r.players[playerId].score}</p>`}
+const timer=document.getElementById('timer');if(timer&&r&&r.index>=0){const left=Math.max(0,Math.ceil((10000-(Date.now()-r.started))/1000));timer.textContent=`Tiempo restante: ${left} s`;if(left===0&&role==='player')document.querySelectorAll('.answers button').forEach(b=>b.disabled=true)}
+}
+window.addEventListener('storage',e=>{if(e.key===KEY)render()});setInterval(render,500);show('home');
+</script></body></html>
