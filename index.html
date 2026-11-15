@@ -1,38 +1,101 @@
 <!doctype html>
-<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Desafío Seguridad AMSZO</title>
-<style>
-:root{font-family:system-ui,Arial;background:#081b36;color:#fff}body{margin:0;padding:24px}main{max-width:780px;margin:auto}h1{color:#f2c66e}h2{margin-top:0}.panel{background:#132b4d;border:1px solid #365377;border-radius:16px;padding:22px;margin:16px 0}button,input,select{font:inherit;padding:12px;border-radius:9px;margin:5px 0}button{background:#f2c66e;color:#14213b;border:0;cursor:pointer;font-weight:700}button:disabled{opacity:.45}input,select{background:#fff;color:#111;width:calc(100% - 28px)}.hide{display:none}.answers button{display:block;width:100%;text-align:left;margin:9px 0}.muted{color:#c8d4e6}.tag{color:#f2c66e}#timer{font-size:2rem;font-weight:bold}li{margin:8px 0}
-</style></head><body><main><header><small class="tag">PREVENCIÓN DE RIESGOS · AMSZO</small><h1>Desafío Seguridad</h1><p>Aprende · Compite · Previene</p></header>
-<section id="home" class="panel"><h2>Selecciona tu rol</h2><button onclick="show('teacher')">Soy instructor</button> <button onclick="show('player')">Soy participante</button><p class="muted">Demostración local: funciona entre pestañas del mismo navegador. Para conectar celulares por internet falta configurar Firebase.</p></section>
-<section id="teacher" class="panel hide"><h2>Panel del instructor</h2><label>Área de trabajo</label><select id="area"><option>Patrullaje Preventivo</option><option>Administración</option><option>TIC</option><option>Aseo</option><option>Mantención</option><option>Operaciones</option></select><button onclick="createRoom()">Crear partida</button><div id="roomInfo"></div><button onclick="nextQuestion()">Iniciar / Siguiente pregunta</button><div id="teacherQuestion"></div><h3>Ranking</h3><ol id="ranking"></ol><button onclick="resetRoom()">Cerrar partida</button></section>
-<section id="player" class="panel hide"><h2>Ingresar a partida</h2><label>Tu nombre</label><input id="playerName" placeholder="Ej.: Jugador 1" maxlength="30"><label>Código de sala</label><input id="roomCode" placeholder="6 dígitos" inputmode="numeric" maxlength="6"><button onclick="joinRoom()">Ingresar</button><p id="joinMessage" class="muted"></p><div id="playerGame"></div></section>
-<footer class="muted">Versión de prueba · No ingresar información personal sensible.</footer></main>
-<script>
-'use strict';
-const QUESTIONS=[
-{q:'Antes de iniciar un patrullaje, ¿qué se debe verificar?',a:['Solo el combustible','Estado del vehículo y elementos de seguridad','Únicamente la radio','Solo el horario'],ok:1},
-{q:'Al detectar una condición insegura durante el servicio, corresponde:',a:['Ignorarla','Continuar sin informar','Informarla y aplicar medidas de control','Publicarla en redes sociales'],ok:2},
-{q:'¿Cuál es una conducta de conducción defensiva?',a:['Mantener distancia de seguridad','Usar el teléfono al conducir','Exceder la velocidad','Frenar bruscamente sin necesidad'],ok:0},
-{q:'Ante una emergencia, la primera prioridad es:',a:['Grabar lo ocurrido','Proteger la vida y activar el procedimiento','Recuperar objetos','Continuar la ronda'],ok:1},
-{q:'¿Para qué se utiliza el equipo de protección personal?',a:['Para reemplazar todos los controles','Para reducir la exposición a riesgos específicos','Solo para cumplir con una formalidad','Para evitar reportar incidentes'],ok:1}
-];
-const KEY='amszo_demo_room_v1';
-const uid=()=>Math.random().toString(36).slice(2,10);
-let playerId=sessionStorage.getItem('amszo_player_id')||uid();sessionStorage.setItem('amszo_player_id',playerId);
-let role='home',lastQuestion=-1,answered=-1,interval=null;
-function getRoom(){try{return JSON.parse(localStorage.getItem(KEY)||'null')}catch{return null}}
-function putRoom(room){localStorage.setItem(KEY,JSON.stringify(room));render()}
-function show(which){role=which;for(const id of ['home','teacher','player'])document.getElementById(id).classList.toggle('hide',id!==which);render()}
-function createRoom(){const room={code:String(Math.floor(100000+Math.random()*900000)),area:document.getElementById('area').value,index:-1,started:0,players:{}};putRoom(room)}
-function resetRoom(){localStorage.removeItem(KEY);render()}
-function joinRoom(){const name=document.getElementById('playerName').value.trim(),code=document.getElementById('roomCode').value.trim(),r=getRoom();const msg=document.getElementById('joinMessage');if(!name){msg.textContent='Escribe tu nombre.';return}if(!r||r.code!==code){msg.textContent='Código incorrecto o partida inexistente.';return}r.players[playerId]={name,score:r.players[playerId]?.score||0,answered:-1};putRoom(r);msg.textContent='¡Ingresaste! Espera la siguiente pregunta.'}
-function nextQuestion(){const r=getRoom();if(!r){alert('Primero crea una partida.');return}if(r.index>=QUESTIONS.length-1){alert('Se terminaron las preguntas. Revisa el ranking.');return}r.index++;r.started=Date.now();putRoom(r)}
-function answer(choice){const r=getRoom();if(!r||!r.players[playerId]||r.index<0||r.players[playerId].answered===r.index||Date.now()-r.started>=10000)return;r.players[playerId].answered=r.index;if(choice===QUESTIONS[r.index].ok)r.players[playerId].score+=100;putRoom(r)}
-function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function render(){const r=getRoom();if(role==='teacher'){document.getElementById('roomInfo').innerHTML=r?`<p>Código de sala: <strong>${r.code}</strong> · ${esc(r.area)}</p><p>Participantes: ${Object.keys(r.players).length}</p>`:'<p>Crea una partida para comenzar.</p>';document.getElementById('teacherQuestion').innerHTML=r&&r.index>=0?`<h3>Pregunta ${r.index+1}/${QUESTIONS.length}</h3><p>${esc(QUESTIONS[r.index].q)}</p><p id="timer"></p>`:'';document.getElementById('ranking').innerHTML=r?Object.values(r.players).sort((a,b)=>b.score-a.score).map(p=>`<li>${esc(p.name)} — ${p.score} puntos</li>`).join(''):''}
-if(role==='player'){const box=document.getElementById('playerGame');if(!r||!r.players[playerId]){box.innerHTML='';return}if(r.index<0){box.innerHTML='<p>Esperando que el instructor inicie la partida…</p>';return}const q=QUESTIONS[r.index],done=r.players[playerId].answered===r.index,left=Math.max(0,Math.ceil((10000-(Date.now()-r.started))/1000));if(lastQuestion!==r.index){lastQuestion=r.index;answered=-1}box.innerHTML=`<h3>Pregunta ${r.index+1}/${QUESTIONS.length}</h3><p>${esc(q.q)}</p><div class="answers">${q.a.map((a,i)=>`<button ${done||left===0?'disabled':''} onclick="answer(${i})">${String.fromCharCode(65+i)}. ${esc(a)}</button>`).join('')}</div><p id="timer"></p><p>${done?'Respuesta registrada.':'Selecciona una respuesta antes de que termine el tiempo.'}</p><p>Puntaje: ${r.players[playerId].score}</p>`}
-const timer=document.getElementById('timer');if(timer&&r&&r.index>=0){const left=Math.max(0,Math.ceil((10000-(Date.now()-r.started))/1000));timer.textContent=`Tiempo restante: ${left} s`;if(left===0&&role==='player')document.querySelectorAll('.answers button').forEach(b=>b.disabled=true)}
-}
-window.addEventListener('storage',e=>{if(e.key===KEY)render()});setInterval(render,500);show('home');
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Desafío Seguridad AMSZO</title>
+<style>:root{font-family:system-ui,Arial;background:#081b36;color:#fff}body{margin:0;padding:18px}main{max-width:850px;margin:auto}h1,.tag{color:#f2c66e}.panel{background:#132b4d;border:1px solid #365377;border-radius:16px;padding:20px;margin:14px 0}button,input,select{font:inherit;padding:12px;border-radius:9px;margin:5px 0}button{background:#f2c66e;color:#14213b;border:0;cursor:pointer;font-weight:700}button:disabled{opacity:.45}input,select{background:#fff;color:#111;width:calc(100% - 28px)}.hide{display:none}.answers button{display:block;width:100%;text-align:left;margin:8px 0}.muted{color:#c8d4e6}.error{color:#ffb6b6}#timer{font-size:1.5rem;font-weight:bold}li{margin:8px 0}small{line-height:1.5}</style></head>
+<body><main><header><small class="tag">PREVENCIÓN DE RIESGOS · AMSZO</small><h1>Desafío Seguridad</h1><p>Aprende · Compite · Previene</p></header>
+<section id="home" class="panel"><h2>Selecciona tu rol</h2><button id="goTeacher">Soy instructor</button> <button id="goPlayer">Soy participante</button><p class="muted">Concurso en tiempo real · 10 preguntas · 10 segundos por pregunta</p></section>
+<section id="teacher" class="panel hide"><button id="backTeacher">← Volver</button><h2>Panel del instructor</h2><div id="loginPanel"><p>Accede con tu cuenta de Google autorizada.</p><button id="googleLogin">Ingresar con Google</button><p id="loginInfo" class="muted"></p></div><div id="teacherControls" class="hide"><p id="instructorName"></p><label>Área de trabajo</label><select id="area"><option>Patrullaje Preventivo</option><option>Administración</option><option>TIC</option><option>Aseo</option><option>Mantención</option><option>Operaciones</option></select><button id="createRoom">Crear partida</button><div id="roomInfo"></div><button id="nextQuestion">Iniciar / Siguiente pregunta</button><button id="closeRoom">Cerrar partida</button><div id="teacherQuestion"></div><h3>Ranking</h3><ol id="ranking"></ol><button id="googleLogout">Cerrar sesión</button></div></section>
+<section id="player" class="panel hide"><button id="backPlayer">← Volver</button><h2>Ingresar a partida</h2><label>Tu nombre</label><input id="playerName" placeholder="Ej.: Jugador 1" maxlength="30"><label>Código de sala</label><input id="roomCode" placeholder="6 dígitos" inputmode="numeric" maxlength="6"><button id="joinRoom">Ingresar</button><p id="joinMessage" class="muted"></p><div id="playerGame"></div></section><footer class="muted"><small>Versión de prueba. No ingresar información sensible. Las respuestas se registran en Firebase.</small></footer></main>
+<script type="module">
+import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+import {getAuth,GoogleAuthProvider,signInWithPopup,signInAnonymously,onAuthStateChanged,signOut} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+import {getDatabase,ref,set,get,onValue,runTransaction,serverTimestamp} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
+const firebaseConfig={apiKey:"AIzaSyAxX2rlpMsIAShbYjS25NXa7SKnwDpQ_1g",authDomain:"desafio-seguridad-amszo.firebaseapp.com",databaseURL:"https://desafio-seguridad-amszo-default-rtdb.firebaseio.com",projectId:"desafio-seguridad-amszo",storageBucket:"desafio-seguridad-amszo.firebasestorage.app",messagingSenderId:"348593836615",appId:"1:348593836615:web:ecc39f3d253b16f2bed762"};
+const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getDatabase(app);
+const BANK={
+'Patrullaje Preventivo':[
+['Antes de iniciar un patrullaje, ¿qué se debe verificar?',['Solo el combustible','Estado del vehículo y elementos de seguridad','Únicamente la radio','Solo el horario'],1],
+['Al detectar una condición insegura durante el servicio, corresponde:',['Ignorarla','Continuar sin informar','Informarla y aplicar medidas de control','Publicarla en redes sociales'],2],
+['¿Cuál es una conducta de conducción defensiva?',['Mantener distancia de seguridad','Usar el teléfono al conducir','Exceder la velocidad','Frenar bruscamente'],0],
+['Ante una emergencia, la primera prioridad es:',['Grabar lo ocurrido','Proteger la vida y activar el procedimiento','Recuperar objetos','Continuar la ronda'],1],
+['¿Para qué se utiliza el equipo de protección personal?',['Para reemplazar todos los controles','Para reducir exposición a riesgos específicos','Solo para cumplir una formalidad','Para evitar reportar incidentes'],1],
+['Si un móvil presenta una falla crítica, corresponde:',['Seguir hasta terminar','Informar y retirar de servicio hasta evaluación','Ocultarla','Conducir más rápido'],1],
+['Al conducir, el cinturón de seguridad debe usarse:',['Solo en autopistas','Solo en trayectos largos','Siempre que corresponda durante el desplazamiento','Solo de noche'],2],
+['En una intervención con riesgo de agresión, es importante:',['Actuar sin coordinación','Mantener distancia, evaluar riesgos y solicitar apoyo','Acercarse sin evaluar','Ignorar los protocolos'],1],
+['Si ocurre un accidente laboral, se debe:',['Informar oportunamente y activar el procedimiento','Esperar al día siguiente','Borrar registros','No comunicarlo'],0],
+['Antes de bajar de un vehículo en la vía pública, se debe:',['Abrir la puerta sin mirar','Evaluar tránsito y entorno antes de descender','Bajar corriendo','Dejar el motor acelerado'],1]],
+'Administración':[
+['Para prevenir caídas en oficina se debe:',['Dejar cables en pasillos','Mantener rutas despejadas','Apilar cajas en salidas','Caminar mirando el teléfono'],1],
+['Una postura adecuada frente al computador considera:',['Pantalla a altura apropiada','Trabajar siempre encorvado','Pies sin apoyo','Teclado muy alejado'],0],
+['Si hay un cable eléctrico dañado, corresponde:',['Usarlo igual','Repararlo con cinta improvisada','Reportarlo y evitar su uso','Mojarlo'],2],
+['En una evacuación se debe:',['Usar ascensor','Seguir rutas y señalización','Volver por objetos','Bloquear puertas'],1],
+['Los pasillos y salidas deben permanecer:',['Despejados','Con cajas','Cerrados con muebles','Sin señalización'],0],
+['Ante un derrame que genere riesgo de caída:',['Ignorarlo','Señalizar y gestionar limpieza segura','Correr sobre él','Taparlo con papeles'],1],
+['Las pausas y cambios de postura ayudan a:',['Aumentar molestias','Reducir fatiga y sobrecarga','Eliminar todos los riesgos','Evitar capacitación'],1],
+['El uso de extensiones eléctricas debe:',['Sobrecargar enchufes','Ser seguro y sin sobrecarga','Pasar bajo alfombras dañadas','Ser permanente sin revisión'],1],
+['Si se detecta humo en una oficina:',['Investigar sin avisar','Activar el procedimiento de emergencia','Abrir todas las puertas sin evaluar','Seguir trabajando'],1],
+['Los incidentes sin lesión deben:',['Ocultarse','Informarse para prevenir accidentes','Registrarse solo si hay daño','Ignorarse'],1]],
+'TIC':[
+['Antes de intervenir un equipo eléctrico se debe:',['Evaluar riesgos y aplicar procedimiento seguro','Tocar cables expuestos','Trabajar con manos húmedas','Omitir revisión'],0],
+['Un cable energizado expuesto debe:',['Dejarse así','Reportarse y aislarse el riesgo','Cubrirse con papel','Manipularse sin protección'],1],
+['Al trabajar en altura corresponde:',['Improvisar una escalera','Usar medios autorizados y controles definidos','Subirse a una silla','Trabajar solo sin evaluar'],1],
+['Los cables en zonas de paso deben:',['Quedar sueltos','Protegerse o canalizarse','Taparse con cartón','Dejarse atravesados'],1],
+['Para levantar equipos pesados conviene:',['Evaluar peso y usar ayuda mecánica o apoyo','Girar bruscamente','Cargar sin evaluar','Levantar sobre la cabeza'],0],
+['Los EPP deben seleccionarse según:',['Color favorito','Riesgos de la tarea','Disponibilidad casual','Marca del equipo'],1],
+['Una herramienta defectuosa debe:',['Seguir usándose','Retirarse y reportarse','Prestarse','Ocultarse'],1],
+['Antes de una tarea no rutinaria se debe:',['Improvisar','Evaluar riesgos y coordinar autorización','Trabajar sin avisar','Omitir EPP'],1],
+['En un tablero eléctrico, el acceso debe estar:',['Bloqueado con cajas','Despejado y controlado','Con líquidos cerca','Sin identificación'],1],
+['Al usar herramientas eléctricas se debe:',['Revisar estado antes del uso','Anular protecciones','Tirar del cable','Trabajar con manos mojadas'],0]],
+'Aseo':[
+['Al usar productos de limpieza se debe:',['Mezclarlos libremente','Revisar etiqueta e instrucciones','Trasvasijar sin identificar','Olerlos directamente'],1],
+['El piso húmedo debe:',['Dejarse sin aviso','Señalizarse para evitar caídas','Cubrirse con papeles','Ignorarse'],1],
+['Los guantes se eligen según:',['El color','El riesgo y producto utilizado','El tamaño de la bodega','La hora'],1],
+['Nunca se debe mezclar cloro con:',['Agua según instrucciones','Amoníaco u otros productos incompatibles','Utensilios limpios','Paños secos'],1],
+['Para levantar una carga se debe:',['Evaluar peso y pedir ayuda si corresponde','Girar el tronco bruscamente','Levantar sin mirar','Correr'],0],
+['Los envases de sustancias deben estar:',['Sin etiqueta','Correctamente identificados','Abiertos','En botellas de bebida'],1],
+['Los residuos cortopunzantes se manipulan:',['Con manos descubiertas','Según procedimiento y contenedor adecuado','Apretándolos','En bolsas comunes sin evaluar'],1],
+['Si hay ventilación insuficiente durante limpieza:',['Continuar igual','Evaluar y controlar exposición','Mezclar más productos','Cerrar todo sin revisar'],1],
+['Antes de usar una máquina de aseo:',['Revisar estado y seguir instrucciones','Anular protecciones','Usarla con cable dañado','No revisar'],0],
+['Si ocurre contacto químico accidental:',['Ocultarlo','Seguir indicaciones de emergencia y reportar','Aplicar otro químico','Esperar sin informar'],1]],
+'Mantención':[
+['Antes de intervenir una máquina corresponde:',['Aislar energías cuando aplique','Retirar guardas sin control','Improvisar','Trabajar sin aviso'],0],
+['Una herramienta dañada debe:',['Seguir usándose','Retirarse de servicio y reportarse','Guardarse sin aviso','Prestarse'],1],
+['En trabajos en altura se requiere:',['Evaluación de riesgos y equipo adecuado','Usar cualquier silla','Trabajar sin supervisión','Subir sin inspección'],0],
+['Para evitar tropiezos se debe:',['Ordenar cables y materiales','Dejar herramientas en pasillos','Bloquear salidas','Acumular residuos'],0],
+['Los EPP se definen por:',['La tarea y riesgos','La moda','El turno','El costo solamente'],0],
+['Antes de usar una escalera se debe:',['Inspeccionar su estado','Apoyarla sobre objetos inestables','Subir con carga excesiva','Ignorar daños'],0],
+['Una intervención eléctrica debe realizarse:',['Sin verificar','Con personal competente y controles establecidos','Con manos mojadas','Sin coordinación'],1],
+['Al usar herramientas motrices es importante:',['Mantener protecciones operativas','Retirar resguardos','Usar ropa suelta cerca de partes móviles','Forzar equipos'],0],
+['Si aparece un riesgo no previsto:',['Detener y reevaluar la tarea','Continuar igual','Ocultarlo','Acelerar'],0],
+['Al terminar un trabajo se debe:',['Dejar residuos','Restituir condiciones seguras y retirar materiales','Bloquear salidas','Abandonar herramientas'],1]],
+'Operaciones':[
+['Antes de asignar una tarea operativa corresponde:',['Evaluar riesgos y recursos','Omitir instrucciones','Improvisar','Ignorar condiciones'],0],
+['Ante una alerta meteorológica se debe:',['Aplicar protocolos y evaluar exposición','Ignorar el pronóstico','Enviar personal sin evaluar','Cancelar comunicaciones'],0],
+['Un incidente debe:',['Reportarse oportunamente','Ocultarse','Publicarse antes de informar','Ignorarse'],0],
+['La coordinación de equipos ayuda a:',['Reducir errores y mejorar respuesta','Evitar protocolos','Eliminar comunicación','Aumentar improvisación'],0],
+['Si hay una condición insegura grave:',['Controlar exposición y gestionar corrección','Continuar sin avisar','Esperar un mes','No registrar'],0],
+['La capacitación preventiva sirve para:',['Reconocer riesgos y actuar de forma segura','Reemplazar todo EPP','Evitar reportes','Eliminar procedimientos'],0],
+['Los vehículos deben contar con:',['Revisión de condiciones de seguridad','Solo combustible','Solo limpieza exterior','Ningún registro'],0],
+['En una emergencia, la comunicación debe ser:',['Clara y según protocolo','Confusa','Solo por redes sociales','Omitida'],0],
+['Al planificar turnos se debe considerar:',['Fatiga y descansos','Solo cantidad de tareas','Ignorar pausas','Evitar relevos'],0],
+['El seguimiento de acciones correctivas busca:',['Verificar que los riesgos se controlen','Archivar sin revisión','Eliminar registros','Evitar participación'],0]]};
+const $=id=>document.getElementById(id);let role='home',user=null,room=null,roomCode='',unsub=null,answeredIndex=-1,joining=false;
+const adminEmail='elvismartinez.1981@gmail.com'; // Debe coincidir con el correo de reglas.
+function isAdmin(){return !!user&&!user.isAnonymous&&user.email?.toLowerCase()===adminEmail.toLowerCase()}
+function escapeHTML(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function show(which){role=which;for(const id of ['home','teacher','player'])$(id).classList.toggle('hide',id!==which);render()}
+$('goTeacher').onclick=()=>show('teacher');$('goPlayer').onclick=()=>show('player');$('backTeacher').onclick=()=>show('home');$('backPlayer').onclick=()=>show('home');
+$('googleLogin').onclick=async()=>{try{if(user?.isAnonymous)await signOut(auth);await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){$('loginInfo').textContent='No se pudo ingresar: '+e.message}};
+$('googleLogout').onclick=()=>signOut(auth);
+onAuthStateChanged(auth,u=>{user=u;$('loginPanel').classList.toggle('hide',isAdmin());$('teacherControls').classList.toggle('hide',!isAdmin());if(u&&!u.isAnonymous)$('loginInfo').textContent='Cuenta: '+u.email+' · UID: '+u.uid+(isAdmin()?'':' · Esta cuenta aún no está autorizada como instructor.');if(isAdmin())$('instructorName').textContent='Instructor: '+u.email;render()});
+function watch(code){if(unsub)unsub();roomCode=code;unsub=onValue(ref(db,'rooms/'+code),snap=>{room=snap.val();render()},err=>{const target=role==='teacher'?'roomInfo':'joinMessage';$(target).textContent='Error de permisos o conexión: '+err.message})}
+$('createRoom').onclick=async()=>{if(!isAdmin())return;const code=String(Math.floor(100000+Math.random()*900000));const data={area:$('area').value,owner:user.uid,index:-1,started:0,status:'waiting',players:{},answers:{}};try{await set(ref(db,'rooms/'+code),data);watch(code)}catch(e){alert('No se pudo crear la partida: '+e.message)}};
+$('nextQuestion').onclick=async()=>{if(!isAdmin()||!room)return;const next=room.index+1;if(next>=10){alert('Terminaron las 10 preguntas. Revisa el ranking.');return}try{await runTransaction(ref(db,'rooms/'+roomCode),r=>{if(!r||r.owner!==user.uid||r.index!==room.index)return;r.index=next;r.started=Date.now()+800;r.status='playing';return r})}catch(e){alert(e.message)}};
+$('closeRoom').onclick=async()=>{if(!isAdmin()||!room)return;try{await set(ref(db,'rooms/'+roomCode+'/status'),'closed')}catch(e){alert(e.message)}};
+$('joinRoom').onclick=async()=>{if(joining)return;joining=true;const name=$('playerName').value.trim(),code=$('roomCode').value.trim();try{if(!name||name.length>30)throw Error('Escribe un nombre de hasta 30 caracteres.');if(!/^\d{6}$/.test(code))throw Error('Escribe un código de seis dígitos.');if(!user){await signInAnonymously(auth)}else if(!user.isAnonymous){throw Error('Abre una ventana privada para participar si ya ingresaste con Google.')}const snap=await get(ref(db,'rooms/'+code));if(!snap.exists())throw Error('La partida no existe.');if(snap.val().status==='closed')throw Error('La partida está cerrada.');await set(ref(db,'rooms/'+code+'/players/'+auth.currentUser.uid),{name,score:0});watch(code);$('joinMessage').textContent='Ingresaste. Espera la pregunta.'}catch(e){$('joinMessage').textContent=e.message}finally{joining=false}};
+window.submitAnswer=async(choice)=>{if(!room||!user||room.index<0||room.status!=='playing')return;const i=room.index;if(room.answers?.[i]?.[user.uid]!==undefined)return;const elapsed=Date.now()-room.started;if(elapsed<0||elapsed>=10000)return;try{await set(ref(db,'rooms/'+roomCode+'/answers/'+i+'/'+user.uid),choice);answeredIndex=i}catch(e){$('joinMessage').textContent='Error al responder: '+e.message}};
+async function tally(){if(!isAdmin()||!room)return;const all=room.answers||{},players=room.players||{},questions=BANK[room.area];for(const [uid,p] of Object.entries(players)){let score=0;for(let i=0;i<10;i++){const a=all[i]?.[uid];if(a===questions[i][2])score+=100}if(p.score!==score){try{await set(ref(db,'rooms/'+roomCode+'/players/'+uid+'/score'),score)}catch{}}}}
+let tallyBusy=false;setInterval(async()=>{if(isAdmin()&&room&&!tallyBusy){tallyBusy=true;try{await tally()}finally{tallyBusy=false}}render()},1000);
+function render(){if(role==='teacher'){if(!isAdmin())return;$('roomInfo').innerHTML=room?`<p><strong>Código: ${roomCode}</strong> · ${escapeHTML(room.area)} · ${escapeHTML(room.status)}</p><p>Participantes: ${Object.keys(room.players||{}).length}</p>`:'<p>Crea una partida para comenzar.</p>';$('teacherQuestion').innerHTML=room?.index>=0?`<h3>Pregunta ${room.index+1}/10</h3><p>${escapeHTML(BANK[room.area][room.index][0])}</p><p>Tiempo restante: ${Math.max(0,Math.ceil((room.started+10000-Date.now())/1000))} s</p>`:'';$('ranking').innerHTML=Object.values(room?.players||{}).sort((a,b)=>b.score-a.score).map(p=>`<li>${escapeHTML(p.name)} — ${p.score} puntos</li>`).join('')}
+if(role==='player'){const box=$('playerGame');if(!room||!user||!room.players?.[user.uid]){box.innerHTML='';return}if(room.status==='closed'){box.innerHTML='<h3>Partida finalizada</h3><p>Tu puntaje: '+(room.players[user.uid].score||0)+'</p>';return}if(room.index<0){box.innerHTML='<p>Esperando al instructor…</p>';return}const q=BANK[room.area][room.index],done=room.answers?.[room.index]?.[user.uid]!==undefined,left=Math.max(0,Math.ceil((room.started+10000-Date.now())/1000));box.innerHTML=`<h3>Pregunta ${room.index+1}/10</h3><p>${escapeHTML(q[0])}</p><div class="answers">${q[1].map((a,i)=>`<button ${done||left===0||room.status!=='playing'?'disabled':''} onclick="submitAnswer(${i})">${'ABCD'[i]}. ${escapeHTML(a)}</button>`).join('')}</div><p id="timer">Tiempo restante: ${left} s</p><p>${done?'Respuesta registrada.':'Selecciona una respuesta antes de que termine el tiempo.'}</p><p>Puntaje: ${room.players[user.uid].score||0}</p>`}}
+show('home');
 </script></body></html>
