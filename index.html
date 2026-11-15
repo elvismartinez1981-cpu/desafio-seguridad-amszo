@@ -30,7 +30,11 @@ main{max-width:1060px}header{text-align:center;padding:16px 0 10px}header h1{fon
 .stage-footer{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:14px;color:#d2e3f5;font-size:.95rem}
 .stage-progress{height:7px;background:#28486b;border-radius:30px;overflow:hidden;margin-top:10px}.stage-progress span{display:block;height:100%;background:linear-gradient(90deg,#20c6e6,#f5ca72)}
 @media(max-width:600px){.stage-hud{gap:8px}.hud-tile{padding:10px;gap:8px;min-height:86px}.clock{width:59px;height:59px}.clock-inner{width:47px;height:47px;font-size:1.4rem}.stage .answers{grid-template-columns:1fr}.stage .answers button{min-height:65px}.stage{padding:14px}.question-card{padding:17px 12px}}
-</style></head><body><main><header><small class="gold">PREVENCIÓN DE RIESGOS · AMSZO</small><h1>Desafío Seguridad</h1><p>Aprende · Compite · Previene</p></header>
+
+#musicToggle{display:block;margin:0 0 12px auto;background:#183d65;color:#fff;border:1px solid #79a5d4;box-shadow:0 5px 18px #0005}
+#musicToggle[aria-pressed="true"]{background:#f5ca72;color:#13243d}
+@media(max-width:600px){#musicToggle{margin:0 auto 14px}}
+</style></head><body><main><header><button id="musicToggle" type="button" aria-pressed="false" title="Activar o desactivar música">♫ Activar música</button><small class="gold">PREVENCIÓN DE RIESGOS · AMSZO</small><h1>Desafío Seguridad</h1><p>Aprende · Compite · Previene</p></header>
 <section id="home" class="panel"><h2>Selecciona tu rol</h2><div class="controls"><button id="goTeacher">Soy instructor</button><button id="goPlayer">Soy participante</button></div><p class="muted">10 preguntas aleatorias · 10 segundos por pregunta · 30 preguntas disponibles por área</p></section>
 <section id="teacher" class="panel hide"><button id="backTeacher">← Volver</button><h2>Panel del instructor</h2><div id="loginPanel"><p>Accede con tu cuenta Google autorizada.</p><button id="googleLogin">Ingresar con Google</button><p id="loginInfo" class="muted"></p></div><div id="teacherControls" class="hide"><p id="instructorName"></p><label>Área de trabajo</label><select id="area"><option>Patrullaje Preventivo</option><option>Administración</option><option>TIC</option><option>Aseo</option><option>Mantención</option><option>Operaciones</option></select><button id="createRoom">Crear partida</button><div id="roomInfo"></div><h3>Solicitudes de ingreso</h3><div id="pendingRequests"></div><div class="controls"><button id="nextQuestion">Iniciar / Siguiente pregunta</button><button id="closeRoom">Cerrar partida</button></div><div id="teacherQuestion"></div><div id="teacherStats"></div><h3>Ranking por aciertos y rapidez</h3><p class="muted small">100 puntos por acierto y hasta 100 adicionales por velocidad. El tiempo puede verse afectado por la conexión.</p><ol id="ranking"></ol><button id="googleLogout">Cerrar sesión</button></div></section>
 <section id="player" class="panel hide"><button id="backPlayer">← Volver</button><h2>Ingresar a partida</h2><label>Tu nombre</label><input id="playerName" placeholder="Ej.: Patrullero 1" maxlength="30"><label>Código de sala</label><input id="roomCode" placeholder="6 dígitos" inputmode="numeric" maxlength="6"><button id="joinRoom">Solicitar ingreso</button><p id="joinMessage" class="muted"></p><div id="playerGame"></div></section>
@@ -79,6 +83,71 @@ if(playerLastHTML!==html){box.innerHTML=html;playerLastHTML=html}
 updatePlayerClock();}}
 let playerLastHTML='';
 function updatePlayerClock(){const ring=$('playerClock'),seconds=$('playerSeconds'),label=$('clockText');if(!ring||!seconds||!label)return;const remaining=Math.max(0,10000-elapsed()),sec=Math.ceil(remaining/1000),st=phase();seconds.textContent=st==='answering'?String(sec):'0';ring.style.setProperty('--progress',st==='answering'?String(remaining/100):'0');ring.classList.toggle('urgent',st==='answering'&&sec<=3);label.textContent=st==='answering'?'¡Responde ya!':st==='reveal'?'Revelando…':'Tiempo finalizado';}
+
+
+// Banda sonora ORIGINAL de suspenso: Web Audio API, sin archivos externos.
+// Se activa solo por decisión del usuario. Volumen moderado.
+let musicContext=null,musicTimer=null,musicStep=0,musicOn=false,lastMusicQuestion=-1,lastMusicPhase='';
+const suspenseNotes=[220,0,233.08,0,220,0,261.63,0,220,0,233.08,0,196,0,207.65,0];
+function musicNote(freq,at,duration,volume,type='sine'){
+  if(!musicContext||!freq)return;
+  const osc=musicContext.createOscillator(),gain=musicContext.createGain();
+  osc.type=type;osc.frequency.setValueAtTime(freq,at);
+  gain.gain.setValueAtTime(0.0001,at);
+  gain.gain.exponentialRampToValueAtTime(Math.max(0.0002,volume),at+0.018);
+  gain.gain.exponentialRampToValueAtTime(0.0001,at+duration);
+  osc.connect(gain);gain.connect(musicContext.destination);
+  osc.start(at);osc.stop(at+duration+0.025);
+}
+function musicTick(){
+  if(!musicOn||!musicContext)return;
+  const t=musicContext.currentTime+0.02;
+  const playing=!!room&&room.status==='playing'&&qIndex()>=0;
+  const remaining=playing&&phase()==='answering'?Math.max(0,10000-elapsed()):null;
+  const tension=remaining!==null&&remaining<=5000;
+  const stepDuration=tension?170:430;
+  if(playing&&phase()==='answering'){
+    // Pulso grave constante; aceleración y pitidos sutiles en la cuenta regresiva.
+    musicNote(110,t,0.13,tension?0.033:0.019,'sine');
+    if(musicStep%2===0)musicNote(suspenseNotes[musicStep%suspenseNotes.length],t,0.24,tension?0.022:0.012,'triangle');
+    if(tension)musicNote(880,t,0.055,0.012,'sine');
+  }else{
+    // Ambiente de espera: notas graves y acordes tenues, sin ritmo invasivo.
+    if(musicStep%2===0){
+      musicNote(110,t,0.55,0.012,'sine');
+      musicNote(suspenseNotes[musicStep%suspenseNotes.length]||220,t,0.35,0.009,'triangle');
+    }
+  }
+  if(playing&&qIndex()===lastMusicQuestion&&lastMusicPhase==='answering'&&phase()!=='answering'){
+    // Señal original al terminar los diez segundos.
+    musicNote(293.66,t,0.26,0.033,'triangle');
+    musicNote(220,t+0.14,0.52,0.029,'sine');
+  }
+  lastMusicQuestion=qIndex();lastMusicPhase=playing?phase():'waiting';
+  musicStep++;
+  clearTimeout(musicTimer);
+  if(musicOn)musicTimer=setTimeout(musicTick,stepDuration);
+}
+const musicButton=document.getElementById('musicToggle');
+musicButton.addEventListener('click',async()=>{
+  try{
+    if(musicOn){
+      musicOn=false;clearTimeout(musicTimer);musicTimer=null;
+      if(musicContext)await musicContext.suspend();
+    }else{
+      const AudioCtx=window.AudioContext||window.webkitAudioContext;
+      if(!AudioCtx)throw new Error('Este navegador no admite audio.');
+      if(!musicContext)musicContext=new AudioCtx();
+      await musicContext.resume();
+      musicOn=true;musicTick();
+    }
+    musicButton.textContent=musicOn?'♫ Silenciar música':'♫ Activar música';
+    musicButton.setAttribute('aria-pressed',String(musicOn));
+  }catch(e){musicOn=false;musicButton.textContent='♫ Audio no disponible';console.warn(e)}
+});
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden&&musicOn){musicOn=false;clearTimeout(musicTimer);musicTimer=null;musicContext?.suspend();musicButton.textContent='♫ Activar música';musicButton.setAttribute('aria-pressed','false')}
+});
 
 setInterval(()=>{render()},180);
 show('home');
