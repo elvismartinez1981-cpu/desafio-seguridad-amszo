@@ -63,7 +63,11 @@ textarea{width:100%;background:#fff;color:#17253a;border:0;border-radius:10px;pa
  <div id="individualQuiz" class="hide"><p id="individualProgress"></p><div class="bar"><div id="individualProgressBar" class="fill" style="width:0%"></div></div><div class="question-card"><p id="individualQuestion" class="eval-question"></p></div><p class="timer">Tiempo restante: <span id="individualSeconds">10</span> s</p><div id="individualChoices" class="answers"></div><p id="individualFeedback" class="eval-note"></p></div>
  <div id="individualFinish" class="hide"></div><p id="individualError" class="error"></p>
 </section>
-<section id="evalAdmin" class="panel hide" aria-hidden="true" style="display:none"></section>
+<section id="evalAdmin" class="panel hide" aria-hidden="true" style="display:none">
+ <button id="evalAdminBack" type="button">← Volver al inicio</button><h2>Panel de evaluaciones individuales</h2>
+ <div id="evalAdminLogin"><p>Acceso restringido al instructor autorizado mediante Google.</p><button id="evalAdminGoogle">Ingresar con Google</button><p id="evalAdminLoginInfo" class="eval-note"></p></div>
+ <div id="evalAdminContent" class="hide"><div class="controls"><button id="evalAdminRefresh">Actualizar registros</button><button id="evalAdminExport">Exportar CSV</button></div><label for="evalAdminSearch">Buscar trabajador por nombre o RUT</label><input id="evalAdminSearch" type="search" placeholder="Escribe nombre o RUT para filtrar el historial"><p id="evalAdminSummary"></p><div id="evalAdminRecords"></div><h3>Firma del instructor</h3><p class="eval-note">Selecciona evaluaciones aprobadas y pendientes de firma. La firma se aplica a las seleccionadas.</p><canvas id="evalInstructorCanvas" class="eval-sign" width="800" height="200"></canvas><div class="eval-actions"><button id="evalClearInstructor">Borrar firma</button><button id="evalSignSelected">Firmar seleccionadas</button></div></div><p id="evalAdminError" class="error"></p>
+</section>
 <div id="evalPrintRoot" style="display:none"></div>
 <footer class="muted small">Versión piloto AMSZO. Datos de prueba: los registros se almacenan en Firebase y el acceso al historial está restringido al instructor autorizado.</footer></main>
 
